@@ -1,0 +1,20 @@
+{
+  "name": "psychemd",
+  "version": "1.0.0",
+  "description": "Expert system for diagnosing certain mental disorder with a Prolog formalization of DSM-5 and generative AI for in-context user interaction.",
+  "license": "GPL-2.0-only",
+  "author": "Drishti Aggarwal, Jagman Sidhu, Brixthan Bautista, Winslow Flandre",
+  "type": "esm",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "openai": "^4.91.1",
+    "swipl": "^1.0.6",
+    "swipl-stdio": "^1.0.4"
+  }
+}

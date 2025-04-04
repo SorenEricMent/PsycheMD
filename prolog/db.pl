@@ -211,16 +211,13 @@ question(f25, anxiety_disorder, "Boolean", "", "", []).
 
 
 %% Criteria Database
-has(social_anxiety_disorder) :- question_answer(f41, yes).
+has(social_anxiety_disorder) :- question_answer(f41, yes, _).
 
 has(anxiety_disorder) :- has(general_anxiety_disorder).
 has(anxiety_disorder) :- has(social_anxiety_disorder).
 
 diagnosis(Result, successful) :- has(Result).
 diagnosis(Result, out_of_capability) :- out_of_capability(Result).
-
-
-
 
 
 %%% Init

@@ -5,83 +5,259 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PsycheMD - Mental Health Diagnosis Assistant</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <style>
         .chat-container {
-            height: calc(100vh - 200px);
+            height: calc(100vh - 250px);
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
         }
         .message {
             max-width: 80%;
-            margin: 1rem;
-            padding: 1rem;
+            margin: 0.5rem;
+            padding: 0.75rem;
             border-radius: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: relative;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        .message p {
+            margin-bottom: 0.5rem;
+        }
+        .message ul, .message ol {
+            margin-left: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .message code {
+            background: rgba(0,0,0,0.05);
+            padding: 0.1rem 0.3rem;
+            border-radius: 0.2rem;
+            font-family: monospace;
+        }
+        .message pre {
+            background: rgba(0,0,0,0.05);
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin: 0.5rem 0;
+        }
+        .message pre code {
+            background: transparent;
+            padding: 0;
+        }
+        .message blockquote {
+            border-left: 3px solid #cbd5e0;
+            padding-left: 1rem;
+            margin: 0.5rem 0;
+            color: #4a5568;
         }
         .user-message {
-            background-color: #e3f2fd;
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
             margin-left: auto;
+            border-bottom-right-radius: 20px;
         }
         .assistant-message {
-            background-color: #f5f5f5;
+            background: linear-gradient(135deg, #ffffff 0%, #f5f5f5 100%);
             margin-right: auto;
+            border-bottom-left-radius: 20px;
         }
         .typing-indicator {
             display: none;
+            color: #666;
+            font-style: italic;
+            font-size: 0.9rem;
+        }
+        .function-indicator {
+            color: #666;
+            font-size: 0.8rem;
+            margin-bottom: 0.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            cursor: pointer;
+            padding: 0.25rem;
+            border-radius: 0.25rem;
+            background: rgba(0,0,0,0.03);
+            width: fit-content;
+        }
+        .function-details {
+            display: none;
+            margin-top: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            background: rgba(0,0,0,0.05);
+            border-radius: 0.25rem;
+            font-family: monospace;
+            font-size: 0.8rem;
+        }
+        .function-details.show {
+            display: block;
+        }
+        .function-indicator i {
+            color: #666;
+            transition: transform 0.2s;
+        }
+        .function-indicator.expanded i.fa-chevron-right {
+            transform: rotate(90deg);
+        }
+        .disclaimer {
+            background: rgba(255,255,255,0.9);
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            margin: 0.5rem;
+            border-left: 4px solid #f59e0b;
+            font-size: 0.9rem;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .header-gradient {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
         }
     </style>
 </head>
 <body class="bg-gray-100">
-    <div class="container mx-auto px-4 py-8">
-        <header class="text-center mb-8">
-            <h1 class="text-4xl font-bold text-blue-600 mb-2">PsycheMD</h1>
-            <p class="text-gray-600">Your Mental Health Diagnosis Assistant</p>
+    <div class="container mx-auto px-4 py-4">
+        <header class="text-center mb-4">
+            <div class="header-gradient text-white rounded-lg p-4 shadow-lg">
+                <h1 class="text-3xl font-bold mb-1">PsycheMD</h1>
+                <p class="text-blue-100 text-sm">Your Mental Health Diagnosis Assistant</p>
+            </div>
         </header>
 
-        <div class="bg-white rounded-lg shadow-lg p-4 chat-container overflow-y-auto" id="chatContainer">
+        <div class="disclaimer">
+            <i class="fas fa-exclamation-triangle text-yellow-500 mr-2"></i>
+            This is just a PoC of our project, only 10 questions from the SCID-5 is encoded, do not share this URL as it is only for testing purposes.
+        </div>
+
+        <div class="bg-white rounded-lg shadow-lg p-2 chat-container overflow-y-auto" id="chatContainer">
             <div class="message assistant-message">
                 <p>Hello! I'm here to help you understand your mental health better. I'll ask you some questions to better understand your situation. Please feel free to share your experiences with me.</p>
             </div>
         </div>
 
-        <div class="typing-indicator mt-4 text-gray-500" id="typingIndicator">
-            Assistant is typing...
+        <div class="typing-indicator mt-2 text-gray-500" id="typingIndicator">
+            <i class="fas fa-ellipsis-h mr-2"></i>Assistant is typing...
         </div>
 
-        <div class="mt-4 flex gap-2">
+        <div class="mt-2 flex gap-2">
             <input type="text" id="userInput" 
-                   class="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                   class="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
                    placeholder="Type your message here...">
             <button id="sendButton" 
-                    class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                Send
+                    class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-lg transition duration-200">
+                <i class="fas fa-paper-plane"></i>
             </button>
         </div>
     </div>
 
     <script>
+        // Configure marked options
+        marked.setOptions({
+            highlight: function(code, lang) {
+                if (lang && hljs.getLanguage(lang)) {
+                    try {
+                        return hljs.highlight(code, { language: lang }).value;
+                    } catch (err) {}
+                }
+                return code;
+            },
+            breaks: true,
+            gfm: true
+        });
+
         const chatContainer = document.getElementById('chatContainer');
         const userInput = document.getElementById('userInput');
         const sendButton = document.getElementById('sendButton');
         const typingIndicator = document.getElementById('typingIndicator');
 
+        // Function to safely convert markdown to HTML
+        function renderMarkdown(text) {
+            try {
+                return marked.parse(text);
+            } catch (e) {
+                console.error('Error parsing markdown:', e);
+                return text;
+            }
+        }
+
         // Function to render the entire chat history
         function renderChat(history) {
-            // Clear the chat container
             chatContainer.innerHTML = '';
             
-            // Messages are in reverse chronological order, so we reverse them for display
             const messagesToDisplay = [...history].reverse();
             
             messagesToDisplay.forEach(msg => {
+                console.log('Message:', msg); // Log the entire message object
+                
                 const messageDiv = document.createElement('div');
                 messageDiv.className = `message ${msg.role === 'user' ? 'user-message' : 'assistant-message'}`;
-                messageDiv.innerHTML = `<p>${msg.content}</p>`;
+                
+                // Create a container for the function indicator if needed
+                if (msg.functionCalls) {
+                    console.log('Function call details:', JSON.stringify(msg.functionCallDetails, null, 2)); // Better logging
+                    
+                    const functionIndicatorDiv = document.createElement('div');
+                    const functionId = `function-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                    
+                    // Create function details HTML
+                    let functionDetailsHtml = '';
+                    if (msg.functionCallDetails && Array.isArray(msg.functionCallDetails)) {
+                        functionDetailsHtml = msg.functionCallDetails.map(call => {
+                            console.log('Processing call:', JSON.stringify(call, null, 2));
+                            return `
+                                <div class="mb-2">
+                                    <div class="text-xs text-blue-600 font-semibold">Function: ${call.name}</div>
+                                    <div class="text-xs mt-1 font-mono bg-gray-50 p-1 rounded">
+                                        <div class="mb-1">Arguments:</div>
+                                        <pre class="whitespace-pre-wrap">${JSON.stringify(call.arguments, null, 2)}</pre>
+                                        <div class="mt-2 mb-1">Result:</div>
+                                        <pre class="whitespace-pre-wrap">${JSON.stringify(call.result, null, 2)}</pre>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+                    }
+
+                    functionIndicatorDiv.innerHTML = `
+                        <div class="function-indicator" onclick="toggleFunctionDetails('${functionId}')">
+                            <i class="fas fa-chevron-right text-xs"></i>
+                            <i class="fas fa-cog fa-spin text-xs"></i>
+                            <span>Prolog function called</span>
+                        </div>
+                        <div id="${functionId}" class="function-details">
+                            ${functionDetailsHtml}
+                        </div>
+                    `;
+                    messageDiv.appendChild(functionIndicatorDiv);
+                }
+                
+                // Create a container for the message content
+                const contentDiv = document.createElement('div');
+                contentDiv.innerHTML = renderMarkdown(msg.content);
+                messageDiv.appendChild(contentDiv);
+
+                // Apply syntax highlighting to code blocks
+                messageDiv.querySelectorAll('pre code').forEach((block) => {
+                    hljs.highlightElement(block);
+                });
+
                 chatContainer.appendChild(messageDiv);
             });
             
-            // Scroll to the bottom
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
-        // Function to fetch and display chat history
+        // Function to toggle function call details
+        function toggleFunctionDetails(id) {
+            const details = document.getElementById(id);
+            const indicator = details.previousElementSibling;
+            details.classList.toggle('show');
+            indicator.classList.toggle('expanded');
+        }
+
         async function fetchChatHistory() {
             try {
                 const response = await fetch('/api/history');
@@ -92,7 +268,6 @@
             }
         }
 
-        // Initial fetch of chat history
         fetchChatHistory();
 
         async function sendMessage() {

@@ -61,7 +61,8 @@ false (which implies no diagnose formed yet)
 ["agoraphobia"]
 ["general_anxiety_disorder"]
 And as I have described previously, if a diagnose has been formed, you need to form the response for the user, and if there are still possible diagnosable disease, continue the loop.
- 
+
+Be reminded to guide the user to enter the interviewing process. 
 `;
 
 
@@ -197,46 +198,49 @@ async function processToolCalls(runResult) {
     const toolOutputs = [];
 
     for (const toolCall of toolCalls) {
-	// Assume the tool call object contains a unique id under "id".
-	const toolCallId = toolCall.id; // Adjust this if your tool call structure differs.
-	const { name, arguments: argsStr } = toolCall.function;
-	let args;
-	try {
-	    args = JSON.parse(argsStr);
-	} catch (e) {
-	    console.error("Error parsing arguments for", name, e);
-	    continue;
-	}
-	let result;
-	switch (name) {
-	case "prolog_getNextQuestion":
+        const toolCallId = toolCall.id;
+        const { name, arguments: argsStr } = toolCall.function;
+        let args;
+        try {
+            args = JSON.parse(argsStr);
+        } catch (e) {
+            console.error("Error parsing arguments for", name, e);
+            continue;
+        }
+        let result;
+        switch (name) {
+        case "prolog_getNextQuestion":
             result = prolog_getNextQuestion(args.disease);
             break;
-	case "prolog_getDBCapability":
+        case "prolog_getDBCapability":
             result = prolog_getDBCapability();
             break;
-	case "prolog_addNewQuestionAnswer":
+        case "prolog_addNewQuestionAnswer":
             console.log(args.question_id, args.answer);
             result = prolog_addNewQuestionAnswer(args.question_id, args.answer);
             break;
-	case "prolog_getDiagnose":
+        case "prolog_getDiagnose":
             result = prolog_getDiagnose();
             break;
-	default:
+        default:
             result = `Unknown function: ${name}`;
-	}
-	console.log(`Executed ${name}, result:`, result);
-	toolOutputs.push({
-	    tool_call_id: toolCallId,
-	    output: JSON.stringify(result)
-	});
+        }
+        console.log(`Executed ${name}, result:`, result);
+        
+        // Store the result in the tool call object
+        toolCall.result = result;
+        
+        toolOutputs.push({
+            tool_call_id: toolCallId,
+            output: JSON.stringify(result)
+        });
     }
 
-    // Submit the tool outputs as specified by the official documentation.
+    // Submit the tool outputs
     await openAI.beta.threads.runs.submitToolOutputs(
-	thread.id,             // Thread ID
-	runResult.id,          // Run ID
-	{ tool_outputs: toolOutputs } // Payload with the tool outputs array
+        thread.id,
+        runResult.id,
+        { tool_outputs: toolOutputs }
     );
 }
 /**
@@ -250,35 +254,68 @@ async function sendMessageToAssistant(message) {
     history.push(userMessage);
     await openAI.beta.threads.messages.create(thread.id, userMessage);
 
-    // Create a run (using createAndPoll) once when sending the message.
-    let runResult = await openAI.beta.threads.runs.createAndPoll(thread.id, { assistant_id: assistant.id });
-    //console.log("Initial run result:", runResult);
+    var hasFunctionCall = false;
+    var functionCallDetails = null;
 
-    // While the run is still active (requires_action), poll for its status.
-    while (runResult.status != "completed") {
-	console.log("Run is active. Polling its status...");
+    try {
+        // Create a run (using createAndPoll) once when sending the message.
+        let runResult = await openAI.beta.threads.runs.createAndPoll(thread.id, { assistant_id: assistant.id });
 
-	// If the run requires tool outputs, process them.
-	if (
-	    runResult.required_action?.type === "submit_tool_outputs" &&
-		runResult.required_action.submit_tool_outputs.tool_calls?.length
-	) {
-	    await processToolCalls(runResult);
-	}
+        // While the run is still active (requires_action), poll for its status.
+        while (runResult.status !== "completed") {
+            console.log("Run is active. Polling its status...");
 
-	// Poll the current run status using the get endpoint.
-	runResult = await openAI.beta.threads.runs.retrieve(thread.id, runResult.id);
-	await new Promise(resolve => setTimeout(resolve, 500));
+            // If the run requires tool outputs, process them.
+            if (
+                runResult.required_action?.type === "submit_tool_outputs" &&
+                runResult.required_action.submit_tool_outputs.tool_calls?.length
+            ) {
+                hasFunctionCall = true;
+                
+                // Process the tool calls first to get the results
+                await processToolCalls(runResult);
+                
+                // Now create the function call details with the results
+                functionCallDetails = runResult.required_action.submit_tool_outputs.tool_calls.map(call => {
+                    const result = call.result;
+                    console.log('Function call result:', result); // Log the result
+                    return {
+                        name: call.function.name,
+                        arguments: JSON.parse(call.function.arguments),
+                        result: result
+                    };
+                });
+            }
+
+            // Poll the current run status using the get endpoint.
+            runResult = await openAI.beta.threads.runs.retrieve(thread.id, runResult.id);
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        // Get the final assistant message
+        const threadMessages = await openAI.beta.threads.messages.list(thread.id);
+        const lastMessage = threadMessages.body.data[0]; // Most recent message
+        
+        // Add the assistant message to history with function call indicator
+        history.push({
+            role: "assistant",
+            content: lastMessage.content
+                .filter(item => item.type === "text")
+                .map(item => item.text.value)
+                .join("\n"),
+            functionCalls: hasFunctionCall,
+            functionCallDetails: functionCallDetails
+        });
+
+    } catch (error) {
+        // If there's an active run, wait for it to complete
+        if (error.status === 400 && error.message.includes('already has an active run')) {
+            console.log('Waiting for active run to complete...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            return sendMessageToAssistant(message);
+        }
+        throw error;
     }
-
-    // Once the run is complete, retrieve the final assistant message from the thread.
-    const threadMessages = await openAI.beta.threads.messages.list(thread.id);
-    // const assistantMessages = threadMessages.data.filter(msg => msg.role === "assistant");
-    const finalAssistantMsg = threadMessages[threadMessages.length - 1];
-    // history.push({ role: "assistant", content: finalAssistantMsg.content ?? finalAssistantMsg });
-    // console.log("Final Assistant message:", JSON.stringify(finalAssistantMsg.content ?? finalAssistantMsg));
-    //    console.log(JSON.stringify(threadMessages));
-    displayMessages(threadMessages);
 }
 
 function displayMessages(messages) {
@@ -353,14 +390,31 @@ async function startServer() {
       // Get all messages from the thread
       const threadMessages = await openAI.beta.threads.messages.list(thread.id);
       
+      console.log('Current history:', JSON.stringify(history, null, 2)); // Better logging of history
+      
       // Format messages for the frontend
-      const formattedMessages = threadMessages.body.data.map(msg => ({
-        role: msg.role,
-        content: msg.content
-          .filter(item => item.type === 'text')
-          .map(item => item.text.value)
-          .join('\n')
-      }));
+      const formattedMessages = threadMessages.body.data.map(msg => {
+        console.log('Processing message:', JSON.stringify(msg, null, 2)); // Better logging of message
+        
+        // Find the corresponding history entry for this message
+        const historyEntry = history.find(h => h.content === msg.content[0].text.value);
+        console.log('Found history entry:', JSON.stringify(historyEntry, null, 2)); // Better logging of history entry
+        
+        const formattedMessage = {
+          role: msg.role,
+          content: msg.content
+            .filter(item => item.type === 'text')
+            .map(item => item.text.value)
+            .join('\n'),
+          functionCalls: historyEntry?.functionCalls || false,
+          functionCallDetails: historyEntry?.functionCallDetails || null
+        };
+
+        console.log('Formatted message:', JSON.stringify(formattedMessage, null, 2)); // Log each formatted message
+        return formattedMessage;
+      });
+
+      console.log('Formatted messages:', JSON.stringify(formattedMessages, null, 2)); // Better logging of final messages
 
       // Update history
       history = formattedMessages;

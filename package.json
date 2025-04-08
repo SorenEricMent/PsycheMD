@@ -11,6 +11,7 @@
     "start": "node index.mjs"
   },
   "dependencies": {
+    "cookie-parser": "^1.4.7",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "openai": "^4.91.1",
